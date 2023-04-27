@@ -6,14 +6,14 @@ import { MerkleTree, generateSigProofCallData, generateMerkleProofCallData, pose
 import { providers, Contract, ethers, BigNumber } from 'ethers';
 
 // from index.js
-import * as AIRDROP_JSON from "../ABIs/PrivateAirdrop.json";
-import * as ERC20_JSON from "@openzeppelin/contracts/build/contracts/ERC20PresetFixedSupply.json";
+//import * as AIRDROP_JSON from "../ABIs/PrivateAirdrop.json";
+//import * as ERC20_JSON from "@openzeppelin/contracts/build/contracts/ERC20PresetFixedSupply.json";
 
-import React from 'react';
-import 'bootstrap/dist/css/bootstrap.min.css';
+//import React from 'react';
+//import 'bootstrap/dist/css/bootstrap.min.css';
 
 // for verify the eth_addr ownership
-async function calculateSigProof(mainAddr, proof) {
+async function calculateSigProof(privateKey, proof) {
   // Connect to wallet, get address
   let provider = new providers.Web3Provider(window.ethereum);
   await provider.send("eth_requestAccounts", []);
@@ -26,7 +26,8 @@ async function calculateSigProof(mainAddr, proof) {
   let wasmBuff = await getFileBuffer(`${zkFilePath}/circuit.wasm`);
   let zkeyBuff = await getFileBuffer(`${zkFilePath}/circuit_final.zkey`);
 
-  let proof = await generateSigProofCallData(mainAddr, address, wasmBuff, zkeyBuff);
+  let preTime = new Date().getTime();
+  proof = await generateSigProofCallData(privateKey, wasmBuff, zkeyBuff);
   let elapsed =  new Date().getTime() - preTime;
   console.log(`Time to compute proof: ${elapsed}ms`);
 }
@@ -60,7 +61,7 @@ async function calculateMerkleProof(mainAddr, proof) {
   
   let preTime = new Date().getTime();
   let biMainAddr = BigInt(mainAddr);
-  let proof = await generateMerkleProofCallData(mt, biMainAddr, address, wasmBuff, zkeyBuff);
+  proof = await generateMerkleProofCallData(mt, biMainAddr, address, wasmBuff, zkeyBuff);
   let elapsed =  new Date().getTime() - preTime;
   console.log(`Time to compute proof: ${elapsed}ms`);
 }

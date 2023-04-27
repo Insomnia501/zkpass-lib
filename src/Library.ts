@@ -7,11 +7,11 @@ import { MerkleTree } from './MerkleTree';
 import { poseidon1, poseidon2 } from './Poseidon';
 
 export async function generateSigProofCallData(
-        mainAddr: string, 
-        receiverAddr: string,
+        privateKey: string, 
         circuitWasmBuffer: Buffer,
         zkeyBuffer: Buffer): Promise<string> {
-    let inputs = await generateSigCircuitInputJson(BigInt(mainAddr), BigInt(receiverAddr));
+    let privateKeyChunks = splitPrivateKey(privateKey);
+    let inputs = await generateSigCircuitInputJson(privateKeyChunks);
 
     let { proof, publicSignals } = await snarkjs.plonk.fullProve(inputs, circuitWasmBuffer, zkeyBuffer);
 
@@ -46,9 +46,30 @@ export function toHex(number: BigInt, length = 32) {
 
 // Non-exported 
 
+function splitPrivateKey(privateKeyHex: string): number[] {
+  if (privateKeyHex.length !== 64) {
+    throw new Error("Invalid private key length. Expected 64 hex characters.");
+  }
+
+  // 将私钥转换为 BigInt 类型的十进制值
+  const privateKeyDecimal = BigInt(0x${privateKeyHex});
+
+  // 计算每部分的大小
+  const chunkSize = privateKeyDecimal / BigInt(4);
+
+  // 分割私钥
+  const privateKeyChunks = [
+    Number(privateKeyDecimal - chunkSize * BigInt(3)),
+    Number(privateKeyDecimal - chunkSize * BigInt(2)),
+    Number(privateKeyDecimal - chunkSize * BigInt(1)),
+    Number(privateKeyDecimal)
+  ];
+
+  return privateKeyChunks;
+}
+
 interface SigCircuitInput {
-    commitment: BigInt;
-    recipient: BigInt;
+    privkey: number[];
 }
 
 interface MerkleCircuitInput {
@@ -60,23 +81,18 @@ interface MerkleCircuitInput {
 }
 
 async function generateSigCircuitInputJson(
-    mainAddrHash: BigInt, 
-    receiverAddr: BigInt): Promise<SigCircuitInput> {
-    let commitment = await poseidon1(mainAddrHash);
-    
-
+    privateKeyChunks: number[]): Promise<SigCircuitInput> {
     let inputObj = {
-        commitment: commitment,
-        recipient: receiverAddr
+        privkey: privateKeyChunks
     }
     return inputObj;
 }
 
 async function generateMerkleCircuitInputJson(
     mt: MerkleTree, 
-    mainAddrHash: BigInt, 
+    mainAddrBi: BigInt, 
     receiverAddr: BigInt): Promise<MerkleCircuitInput> {
-    let commitment = await poseidon1(mainAddrHash);
+    let commitment = await poseidon1(mainAddrBi);
     let mp = mt.getMerkleProof(commitment);
 
     let inputObj = {
