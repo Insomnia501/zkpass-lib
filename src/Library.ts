@@ -6,14 +6,29 @@ const snarkjs = require("snarkjs");
 import { MerkleTree } from './MerkleTree';
 import { poseidon1, poseidon2 } from './Poseidon';
 
-export async function generateProofCallData(
-        merkleTree: MerkleTree, 
-        key: BigInt, 
-        secret: BigInt, 
+export async function generateSigProofCallData(
+        mainAddr: string, 
         receiverAddr: string,
         circuitWasmBuffer: Buffer,
         zkeyBuffer: Buffer): Promise<string> {
-    let inputs = await generateCircuitInputJson(merkleTree, key, secret, BigInt(receiverAddr));
+    let inputs = await generateSigCircuitInputJson(BigInt(mainAddr), BigInt(receiverAddr));
+
+    let { proof, publicSignals } = await snarkjs.plonk.fullProve(inputs, circuitWasmBuffer, zkeyBuffer);
+
+    let proofProcessed = unstringifyBigInts(proof);
+    let pubProcessed = unstringifyBigInts(publicSignals);
+    let allSolCallData: string = await snarkjs.plonk.exportSolidityCallData(proofProcessed, pubProcessed);
+    let solCallDataProof = allSolCallData.split(',')[0];
+    return solCallDataProof;
+}
+
+export async function generateMerkleProofCallData(
+        merkleTree: MerkleTree, 
+        mainAddr: BigInt, 
+        receiverAddr: string,
+        circuitWasmBuffer: Buffer,
+        zkeyBuffer: Buffer): Promise<string> {
+    let inputs = await generateMerkleCircuitInputJson(merkleTree, BigInt(mainAddr), BigInt(receiverAddr));
 
     let { proof, publicSignals } = await snarkjs.plonk.fullProve(inputs, circuitWasmBuffer, zkeyBuffer);
 
@@ -31,33 +46,45 @@ export function toHex(number: BigInt, length = 32) {
 
 // Non-exported 
 
-interface CircuitInput {
+interface SigCircuitInput {
+    commitment: BigInt;
+    recipient: BigInt;
+}
+
+interface MerkleCircuitInput {
     root: BigInt;
-    nullifierHash: BigInt;
-    nullifier: BigInt;
-    secret: BigInt;
+    commitment: BigInt;
     pathIndices: number[];
     pathElements: BigInt[];
     recipient: BigInt;
 }
 
-async function generateCircuitInputJson(
+async function generateSigCircuitInputJson(
+    mainAddrHash: BigInt, 
+    receiverAddr: BigInt): Promise<SigCircuitInput> {
+    let commitment = await poseidon1(mainAddrHash);
+    
+
+    let inputObj = {
+        commitment: commitment,
+        recipient: receiverAddr
+    }
+    return inputObj;
+}
+
+async function generateMerkleCircuitInputJson(
     mt: MerkleTree, 
-    nullifier: BigInt, 
-    secret: BigInt,
-    recieverAddr: BigInt): Promise<CircuitInput> {
-    let commitment = await poseidon2(nullifier, secret);
+    mainAddrHash: BigInt, 
+    receiverAddr: BigInt): Promise<MerkleCircuitInput> {
+    let commitment = await poseidon1(mainAddrHash);
     let mp = mt.getMerkleProof(commitment);
-    let nullifierHash = await poseidon1(nullifier);
 
     let inputObj = {
         root: mt.root.val,
-        nullifierHash: nullifierHash,
-        nullifier: nullifier,
-        secret: secret,
+        commitment: commitment,
         pathIndices: mp.indices,
         pathElements: mp.vals,
-        recipient: recieverAddr
+        recipient: receiverAddr
     }
     return inputObj;
 }
